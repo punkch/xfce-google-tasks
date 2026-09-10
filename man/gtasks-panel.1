@@ -1,4 +1,4 @@
-.TH GTASKS-PANEL 1 "2026-09-09" "gtasks-panel 0.1.0" "User Commands"
+.TH GTASKS-PANEL 1 "2026-09-10" "gtasks-panel 0.2.0" "User Commands"
 .SH NAME
 gtasks-panel \- Google Tasks counter for the XFCE Generic Monitor plugin
 .SH SYNOPSIS
@@ -31,7 +31,8 @@ Without options,
 prints XML for the xfce4-genmon-plugin with the number of open Google
 Tasks across all task lists. Genmon runs it on a timer. A click on the
 item runs
-.BR gtasks-open (1).
+.BR gtasks-window (1):
+one click opens a popup, two clicks open the full window.
 .PP
 Genmon blocks the panel while the command runs. So this mode does no
 network I/O. It reads the state file and prints it. When the file is
@@ -41,8 +42,11 @@ seconds (config.ini, default 300) it starts
 .B "gtasks-panel \-\-fetch"
 in the background.
 .PP
-The script never changes tasks. It uses the read-only scope
-.IR tasks.readonly .
+This mode never changes tasks. The sign-in uses the scope
+.IR https://www.googleapis.com/auth/tasks ,
+because
+.BR gtasks-window (1)
+shares the same token and does change tasks.
 .SH OPTIONS
 .TP
 .B \-\-fetch
@@ -85,11 +89,12 @@ Last known count. The last refresh failed. See the tooltip.
 No count yet. A fetch runs, or the first fetch failed. See the tooltip.
 .TP
 .B setup
-No OAuth client file. Click to open a terminal with
-.BR "gtasks-panel \-\-auth" .
+No OAuth client file. Click to open the window. It shows where to put
+the file.
 .TP
 .B "sign in"
-No token, or the token expired or was revoked. Click to sign in.
+No token, or the token expired, or it was revoked, or it does not have
+the read-write scope that version 0.2.0 needs. Click to sign in.
 .TP
 .B !
 The script crashed. See the tooltip.
@@ -99,7 +104,8 @@ The script crashed. See the tooltip.
 OAuth client from Google Cloud Console (Desktop app). You add it.
 .TP
 .I $XDG_CONFIG_HOME/gtasks-panel/config.ini
-Optional settings: icon, icon_overdue, label, open_command, refresh.
+Optional settings: icon, icon_overdue, label, open_command, refresh,
+default_list.
 .TP
 .I $XDG_STATE_HOME/gtasks-panel/token.json
 Saved sign-in.
@@ -113,5 +119,5 @@ Held while a fetch runs.
 An OAuth app in "Testing" status gives tokens that expire after 7 days.
 Set the consent screen to "In production" for a long-lived token.
 .SH SEE ALSO
-.BR gtasks-open (1),
+.BR gtasks-window (1),
 .BR xfce4-panel (1)

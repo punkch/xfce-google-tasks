@@ -9,7 +9,12 @@ icon = task-due
 icon_overdue = task-past-due
 # Text next to the icon. {count} is the number of open tasks.
 label = {count}
-# Command that runs on click.
-open_command = gtasks-open
+# Command that runs on a panel click. gtasks-window shows the popup on
+# one click and the full window on two clicks.
+open_command = gtasks-window
 # Seconds between two Google queries. Minimum 30.
 refresh = 300
+# Title of the task list a quick-add goes to, in the popup and the full
+# window. A list you choose in the window always wins over this one.
+# Empty = the chosen list, or the first list when All lists is chosen.
+default_list =

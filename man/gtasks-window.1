@@ -1,0 +1,90 @@
+.TH GTASKS-WINDOW 1 "2026-09-10" "gtasks-panel 0.2.0" "User Commands"
+.SH NAME
+gtasks\-window \- see and change Google Tasks in a GTK window
+.SH SYNOPSIS
+.B gtasks-window
+.br
+.B gtasks-window
+.B \-\-window
+.br
+.B gtasks-window
+.B \-\-quit
+.br
+.B gtasks-window
+.B \-\-version
+.SH DESCRIPTION
+.B gtasks-window
+shows your Google Tasks. It uses the same sign-in as
+.BR gtasks-panel (1),
+so you sign in one time only.
+.PP
+The panel item runs this command on every click. The first process stays
+alive and every later start hands its arguments to it over D-Bus. The
+window is therefore fast from the second click on.
+.SH CLICK ON THE PANEL ITEM
+.TP
+.B "single click"
+A small popup opens under the pointer. It lists the open tasks with a
+check button for each one, a field to add a task, a list chooser, and a
+button that opens the full window. A second single click closes it. The
+popup also closes on Escape or when it loses the focus.
+.TP
+.B "double click"
+The full window opens: task lists on the left, tasks in the middle,
+the details of the chosen task on the right. There you can add tasks,
+change the title, the notes and the due date, mark tasks done, move a
+task to another list, and delete a task.
+.PP
+Two clicks count as a double click when they are less than 400
+milliseconds apart, or less than twice the GTK double-click time when
+that is larger.
+.SH OPTIONS
+.TP
+.B \-\-window
+Open the full window at once. The desktop menu entry uses this.
+.TP
+.B \-\-quit
+Stop the window process. Use it one time after a package upgrade: the
+old process keeps running and the panel click would go to it.
+.TP
+.B \-\-version
+Print the version.
+.SH SIGN IN
+When there is no OAuth client file, the window shows the path to put it
+at and the steps to make one. When there is no token, or the token
+expired, the window shows a
+.B "Sign in"
+button. The button runs
+.B "gtasks-panel \-\-auth"
+as a child process, which opens a browser.
+.SH OFFLINE
+The window keeps the last answer from Google in a cache file. Without a
+network it shows the cache and a bar that says
+.IR "Offline. Showing saved tasks." .
+Changes are turned off until the network is back.
+.SH FILES
+.TP
+.I $XDG_CACHE_HOME/gtasks-panel/tasks.json
+Every task list and task of the last query. The window shows this first.
+.TP
+.I $XDG_STATE_HOME/gtasks-panel/window.json
+Size of the full window.
+.TP
+.I $XDG_STATE_HOME/gtasks-panel/token.json
+Saved sign-in. Shared with
+.BR gtasks-panel (1).
+.TP
+.I $XDG_CONFIG_HOME/gtasks-panel/config.ini
+Optional settings. The key
+.I default_list
+gives the title of the list a new task goes to.
+.SH NOTES
+Delete is permanent in Google Tasks. The window waits 8 seconds behind an
+.B Undo
+bar before it sends the delete.
+.PP
+Sub-tasks are shown indented. This version cannot change the parent of a
+task and cannot reorder tasks by hand.
+.SH SEE ALSO
+.BR gtasks-panel (1),
+.BR xfce4-panel (1)

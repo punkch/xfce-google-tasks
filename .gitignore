@@ -5,8 +5,7 @@ debian/files
 debian/*.substvars
 debian/debhelper-build-stamp
 debian/*.debhelper.log
-bin/__pycache__/
-tests/__pycache__/
+__pycache__/
 .pytest_cache/
 *.deb
 *.buildinfo

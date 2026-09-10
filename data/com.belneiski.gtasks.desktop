@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Google Tasks
+GenericName=Task list
+Comment=See and change your Google Tasks
+Exec=gtasks-window --window
+Icon=task-due
+Terminal=false
+Categories=Office;
+Keywords=tasks;todo;google;
+StartupNotify=false
+StartupWMClass=gtasks-window

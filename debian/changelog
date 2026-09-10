@@ -1,3 +1,22 @@
+gtasks-panel (0.2.0) unstable; urgency=medium
+
+  * Own GTK 3 window instead of the Chrome app window. One click on the
+    panel item opens a popup with the open tasks, two clicks open the
+    full window with lists, tasks and a detail pane.
+  * New command gtasks-window and desktop entry com.belneiski.gtasks.
+  * Add, complete, un-complete, edit title, notes and due date, move to
+    another list, delete with an undo bar, show completed.
+  * Read-write scope https://www.googleapis.com/auth/tasks. A 0.1.0
+    token is read-only, so run "gtasks-panel --auth" one time again.
+  * Code moved into the private package /usr/share/gtasks-panel.
+  * Task cache in $XDG_CACHE_HOME/gtasks-panel/tasks.json: the window
+    opens at once and works offline.
+  * Drop gtasks-open, wmctrl and the Chrome and terminal recommends.
+  * After an upgrade run "gtasks-window --quit" one time: the old
+    process stays resident.
+
+ -- Pencho BELNEYSKI <pencho@belneiski.com>  Thu, 10 Sep 2026 11:49:38 +0200
+
 gtasks-panel (0.1.0) unstable; urgency=medium
 
   * Initial release.

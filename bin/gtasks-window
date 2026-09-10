@@ -1,0 +1,50 @@
+#!/usr/bin/python3
+# Entry point of the Google Tasks window. The code is in gtasks_panel.ui.
+#
+# The click time is the first statement on purpose. The panel starts this
+# script once for every click, and the gap between two starts is what
+# tells a single click from a double click. Imports must not count.
+import time; CLICKED_AT = time.time()
+
+import sys
+from pathlib import Path
+
+USAGE = """usage: gtasks-window [--window | --quit | --version]
+
+Google Tasks window for the XFCE panel item.
+
+  (no option)  Panel click: one click shows the popup, two the window.
+  --window     Open the full window. Used by the desktop menu entry.
+  --quit       Stop a window process that is still running.
+  --version    Print the version and exit.
+"""
+
+HERE = Path(__file__).resolve().parent
+for candidate in (HERE.parent, HERE.parent / "share" / "gtasks-panel"):
+    if (candidate / "gtasks_panel" / "__init__.py").exists():
+        sys.path.insert(0, str(candidate))
+        break
+
+args = sys.argv[1:]
+if any(arg in ("-h", "--help") for arg in args):
+    print(USAGE, end="")
+    sys.exit(0)
+
+from gtasks_panel import VERSION
+
+if "--version" in args:
+    print(f"gtasks-window {VERSION}")
+    sys.exit(0)
+
+from gtasks_panel.ui import app
+
+# The sign-in page starts `gtasks-panel --auth`. Hand the app the script
+# beside us; without it, the package looks on PATH. Only the first
+# process uses it, so the app reads it in do_startup.
+sibling = HERE / "gtasks-panel"
+
+# No option means the panel clicked us. Stamp the time for the first process.
+if not args:
+    args = ["--clicked-at", repr(CLICKED_AT)]
+
+sys.exit(app.run([sys.argv[0], *args], entry=sibling if sibling.is_file() else None))

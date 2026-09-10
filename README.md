@@ -1,9 +1,11 @@
 # gtasks-panel
 
-Google Tasks counter for the XFCE panel.
+Google Tasks counter and window for the XFCE panel.
 
-It shows the number of open tasks in the panel. A click opens Google
-Tasks as an app window. A second click focuses that window.
+It shows the number of open tasks in the panel. A single click opens a
+small popup with your open tasks. A double click opens a full GTK
+window. You sign in to Google one time. No browser window and no
+second sign-in.
 
 It uses the XFCE **Generic Monitor** plugin (genmon). Genmon runs the
 `gtasks-panel` script on a timer and shows its output. There is no
@@ -21,12 +23,21 @@ Build the Debian package and install it:
 
 ```
 make deb
-sudo apt install ./dist/gtasks-panel_0.1.0_all.deb
+sudo apt install ./dist/gtasks-panel_0.2.0_all.deb
 ```
 
-The package depends on `xfce4-genmon-plugin`, `wmctrl`, and the Google
-API Python packages from apt. It recommends `google-chrome-stable` or
-`chromium`.
+The package depends on `xfce4-genmon-plugin`, `xfconf`, `python3-gi`,
+`gir1.2-gtk-3.0`, and the Google API Python packages from apt.
+
+### Upgrading from 0.1.0
+
+The 0.2.0 window needs a wider sign-in scope, and the old window
+process keeps running under a new package. After the upgrade:
+
+```
+gtasks-window --quit      # stop the old resident process
+gtasks-panel --auth       # sign in again for the new scope
+```
 
 Without Debian:
 
@@ -53,11 +64,18 @@ This widget uses a few hundred per day.
 4. Go to **Credentials → Create credentials → OAuth client ID**.
    Application type **Desktop app**. Download the JSON.
 5. Save the file as `~/.config/gtasks-panel/client_secret.json`.
-6. Sign in. A browser opens. Accept the read-only scope.
+6. Sign in. A browser opens. The app asks for the read-write scope
+   `https://www.googleapis.com/auth/tasks`, because the window changes
+   tasks, not only counts them.
 
    ```
    gtasks-panel --auth
    ```
+
+   An unverified app shows a warning page first: **"Google hasn't
+   verified this app"**. Click **Advanced**, then **Go to (your app
+   name) (unsafe)**. This is normal for a personal OAuth client that
+   Google has not reviewed. Accept the scope.
 
 7. Add the panel item. The panel restarts.
 
@@ -77,6 +95,43 @@ Put your downloaded JSON at `share/client_secret.json` in this repo and run
 The file is in `.gitignore`. Google's docs do not state a policy on
 shipping desktop-app secrets. You decide.
 
+## The window
+
+A click on the panel item runs `gtasks-window`. It keeps one process
+resident, so the second and later clicks are fast.
+
+- **Single click**: a popup opens under the pointer. It lists the open
+  tasks of the chosen list, with a check button for each one, a
+  quick-add field, a list chooser, and an "Open window" button. A
+  second single click, the Escape key, or a click outside the popup
+  closes it.
+- **Double click**: the full window opens. Lists are on the left,
+  tasks in the middle, and the details of the chosen task on the
+  right. There you add tasks, change the title, the notes and the due
+  date, mark a task done, move it to another list, delete it (with an
+  8-second Undo bar), and turn "Show completed" on or off.
+
+Two clicks count as a double click when they land less than 400
+milliseconds apart, or less than twice the desktop's double-click
+time when that is larger.
+
+A new task from the quick-add field goes to the list chosen in the
+list chooser or the sidebar. With "All lists" chosen, it goes to the
+list named by `default_list` in `config.ini`, or the first list when
+`default_list` is empty. See `config.ini.example` for every key.
+
+The window keeps the tasks from the last query in
+`~/.cache/gtasks-panel/tasks.json` and shows them at once, before the
+network reply comes back. Without a network connection it shows that
+cache and a banner "Offline. Showing saved tasks."; adding, editing,
+and deleting are turned off until the network is back. An error that
+Google itself returns (for example, a permission problem) shows in a
+red bar instead, and editing stays on.
+
+`gtasks-window --window` opens the full window directly. The desktop
+menu entry "Google Tasks" uses it. `gtasks-window --quit` stops the
+resident process. Run it once after every package upgrade.
+
 ## Commands
 
 | Command | What it does |
@@ -88,17 +143,19 @@ shipping desktop-app secrets. You decide.
 | `gtasks-panel --install-panel [--period 60] [--panel 0]` | Add the panel item. Period minimum 30. |
 | `gtasks-panel --uninstall-panel` | Remove the panel item. |
 | `gtasks-panel --version` | Print the version. |
-| `gtasks-open` | Focus or open the Google Tasks window. |
+| `gtasks-window` | Panel click: popup on one click, full window on two. |
+| `gtasks-window --window` | Open the full window directly. |
+| `gtasks-window --quit` | Stop the resident window process. |
 
 ## Panel states
 
 | Panel text | Meaning | Click does |
 |-----------|---------|------------|
-| `7` | 7 open tasks | Open or focus Google Tasks |
-| `7?` | Last count was 7. The last refresh failed. | Open Google Tasks. Tooltip shows the error. |
-| `…` | No count yet. A fetch runs or failed. | Open Google Tasks. Tooltip shows the error. |
-| `setup` | `client_secret.json` is missing | Open a terminal with `gtasks-panel --auth` |
-| `sign in` | No token, or token expired or revoked | Same |
+| `7` | 7 open tasks | Popup (one click) or window (two) with the tasks |
+| `7?` | Last count was 7. The last refresh failed. | Same. Tooltip shows the error. |
+| `…` | No count yet. A fetch runs or failed. | Same. Tooltip shows the error. |
+| `setup` | `client_secret.json` is missing | Popup or window shows the path to add it |
+| `sign in` | No token, or token expired, revoked, or missing the read-write scope | Popup or window shows the Sign in page |
 | `!` | The script crashed | Tooltip shows the error |
 
 The icon changes to `task-past-due` when at least one task is overdue.
@@ -115,20 +172,9 @@ After a failed fetch the script waits 60 seconds before it tries again.
 | `~/.local/state/gtasks-panel/token.json` | Saved sign-in. Mode 0600. |
 | `~/.local/state/gtasks-panel/state.json` | Last count, last error, sign-in state. |
 | `~/.local/state/gtasks-panel/lock` | Held while a fetch runs. |
-| `~/.config/google-chrome-tasks-app/` | Browser profile for the app window. |
+| `~/.local/state/gtasks-panel/window.json` | Size of the full window. |
+| `~/.cache/gtasks-panel/tasks.json` | Tasks from the last query, mode 0600. |
 | `~/.config/xfce4/panel/genmon-N.rc` | Genmon item config, written by `--install-panel`. |
-
-## How the click works
-
-`gtasks-open` asks `wmctrl` to focus a window with class
-`GoogleTasksApp`. If there is none, it starts Chrome (or Chromium) with
-`--app=https://tasks.google.com`, `--class=GoogleTasksApp` and its own
-`--user-data-dir`. A separate profile directory is necessary. Without it,
-a Chrome that already runs takes the URL and ignores `--class`.
-`gtasks-open` exits with 1 when it finds no Chrome and no Chromium.
-
-You sign in to Google inside that window one time. That sign-in is
-separate from the `--auth` sign-in.
 
 ## Troubleshooting
 
@@ -140,28 +186,43 @@ separate from the `--auth` sign-in.
   `gtasks-panel --fetch` to see the error directly.
 - **Panel shows `sign in` every week**: the OAuth app is in Testing
   status. See Setup step 3.
-- **Click opens a second window**: run `wmctrl -x -l`. The class must
-  contain `GoogleTasksApp`. If not, set `GTASKS_WIN_CLASS` in the
-  environment of the panel, or check that no other Chrome uses the same
-  profile dir.
-- **Count does not change after `--auth`**: genmon updates on its timer
-  (1 minute by default). Wait, or restart the panel with
+- **Popup does not close when you click away**: click the panel item
+  again to close it, or press Escape.
+- **`sign in` comes back after an upgrade**: the new version needs the
+  read-write scope. Run `gtasks-panel --auth` again.
+- **Count does not change after `--auth`**: genmon updates on its
+  timer (1 minute by default). Wait, or restart the panel with
   `xfce4-panel -r`.
+- **The window still behaves like the old version after an upgrade**:
+  a resident process from before the upgrade is still running. Run
+  `gtasks-window --quit`, then click the panel item again.
+- **Count does not change after a change in the window**: the window
+  updates the panel item at once through a genmon plugin event. If
+  that does not reach the panel, wait for the next `refresh` tick or
+  run `gtasks-panel --fetch`.
 - **Count is old**: a new fetch runs every `refresh` seconds (default
   300). Set a smaller value in `config.ini`. Minimum 30.
-- **Wayland**: `wmctrl` needs X11. Focus does not work on Wayland.
 
 ## Development
 
 ```
-make check     # syntax checks, man page check, pytest (tests/)
+make check     # syntax checks, compileall, desktop-file-validate,
+               # man page check, pytest (tests/)
 make deb       # build dist/gtasks-panel_*.deb
 make clean
 ```
 
-The tests in `tests/` load `bin/gtasks-panel` as a module with the XDG
-directories under a temporary path. They do not need Google packages or
-network. `python3-pytest` from apt runs them.
+The tests in `tests/` import the `gtasks_panel` package with the XDG
+directories under a temporary path. Most of them do not need Google
+packages, GTK, or network. `python3-pytest` from apt runs them.
 
-Bump the version in `debian/changelog` (`dch -v 0.2.0`) before a new
-build. The `Makefile` reads the version from there.
+The GTK smoke tests open real windows, so they run only on request,
+under a virtual display:
+
+```
+GTASKS_UI_TESTS=1 xvfb-run -a python3 -m pytest tests/test_ui_smoke.py
+```
+
+Bump the version in `debian/changelog` (`dch -v 0.2.1`) and in
+`gtasks_panel/__init__.py` before a new build. The `Makefile` reads the
+package version from `debian/changelog`.
