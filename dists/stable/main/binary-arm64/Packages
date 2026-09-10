@@ -1,0 +1,28 @@
+Package: gtasks-panel
+Architecture: all
+Version: 0.3.0
+Priority: optional
+Section: x11
+Maintainer: Pencho BELNEYSKI <pencho@belneiski.com>
+Installed-Size: 178
+Depends: python3, python3-gi, gir1.2-gtk-3.0, python3-googleapi, python3-google-auth-oauthlib, python3-google-auth-httplib2, python3-httplib2, xfce4-genmon-plugin, xfconf
+Filename: pool/main/gtasks-panel_0.3.0_all.deb
+Size: 47204
+MD5sum: cadd63eee1aba21617535bce2f5679a0
+SHA1: b1566b0a5869c6689affeb816f29b91ef765ed57
+SHA256: 8ecf2c503da2fac115de1d7c5f816a14faacc251e36a217818f101078512fd5f
+SHA512: 5fb468f14d71d9aff0cd71a756a1b6865a85f8786c7260ce44a66a867352decefea128dfcee9f7f285395c840413c949d4d3aedd9eb011dbd13a788d8d6913bc
+Description: Google Tasks counter and window for the XFCE panel
+ Shows the number of open Google Tasks in the XFCE panel through the
+ Generic Monitor (genmon) plugin. One click on the item opens a popup
+ with the open tasks, a check button for each one and a quick-add
+ field. Two clicks open a GTK window with the task lists, the tasks and
+ a detail pane to change title, notes, due date and list.
+ .
+ The tasks stay in the panel. After the first sign-in you do not open
+ the Google Tasks web page again.
+ .
+ After install: put your OAuth client_secret.json in
+ ~/.config/gtasks-panel/, run "gtasks-panel --auth", then
+ "gtasks-panel --install-panel".
+

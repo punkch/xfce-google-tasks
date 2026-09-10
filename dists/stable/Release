@@ -1,0 +1,36 @@
+Architectures: amd64 arm64 all
+Codename: stable
+Components: main
+Date: Thu, 10 Sep 2026 14:41:32 +0000
+Description: Google Tasks for the XFCE panel
+Label: gtasks-panel
+Origin: gtasks-panel
+Suite: stable
+MD5Sum:
+ 2248325357d6240622a79fac4a323ae7             1341 main/binary-all/Packages
+ 3b2c2222a82bed9440aaf8944c095ba5              821 main/binary-all/Packages.gz
+ 2248325357d6240622a79fac4a323ae7             1341 main/binary-amd64/Packages
+ 3b2c2222a82bed9440aaf8944c095ba5              821 main/binary-amd64/Packages.gz
+ 2248325357d6240622a79fac4a323ae7             1341 main/binary-arm64/Packages
+ 3b2c2222a82bed9440aaf8944c095ba5              821 main/binary-arm64/Packages.gz
+SHA1:
+ bfe04b1dcc54a4830187e2b66c4b97ec39728fb9             1341 main/binary-all/Packages
+ 62fe3123d066bf147198abb9c8e302fbfc383763              821 main/binary-all/Packages.gz
+ bfe04b1dcc54a4830187e2b66c4b97ec39728fb9             1341 main/binary-amd64/Packages
+ 62fe3123d066bf147198abb9c8e302fbfc383763              821 main/binary-amd64/Packages.gz
+ bfe04b1dcc54a4830187e2b66c4b97ec39728fb9             1341 main/binary-arm64/Packages
+ 62fe3123d066bf147198abb9c8e302fbfc383763              821 main/binary-arm64/Packages.gz
+SHA256:
+ 6beec3ecbfa23c57029019e48ab7e4f355660f458d8b52cf45009d92a08da67c             1341 main/binary-all/Packages
+ 446a9376ae055eee03528bd0f7b7c9a7d290492ea20c17fdfe79dc8af58d78ba              821 main/binary-all/Packages.gz
+ 6beec3ecbfa23c57029019e48ab7e4f355660f458d8b52cf45009d92a08da67c             1341 main/binary-amd64/Packages
+ 446a9376ae055eee03528bd0f7b7c9a7d290492ea20c17fdfe79dc8af58d78ba              821 main/binary-amd64/Packages.gz
+ 6beec3ecbfa23c57029019e48ab7e4f355660f458d8b52cf45009d92a08da67c             1341 main/binary-arm64/Packages
+ 446a9376ae055eee03528bd0f7b7c9a7d290492ea20c17fdfe79dc8af58d78ba              821 main/binary-arm64/Packages.gz
+SHA512:
+ c4641ff4d433b01942f8f35cb9fbf87036bc81a1a3919c65e87c23dd4e2bd5849e55429073f9dc28d1db245dd1403152376e1fbc621f141565cd2fb1dce59dea             1341 main/binary-all/Packages
+ 3560085351929d5d5ef78153ab0df039f0916c3db4f206a0f51ac4a12bb722745460ce1b5bb631d3d8e64a797687952ef31f4c03019b16f0f15d65f8dfc9831a              821 main/binary-all/Packages.gz
+ c4641ff4d433b01942f8f35cb9fbf87036bc81a1a3919c65e87c23dd4e2bd5849e55429073f9dc28d1db245dd1403152376e1fbc621f141565cd2fb1dce59dea             1341 main/binary-amd64/Packages
+ 3560085351929d5d5ef78153ab0df039f0916c3db4f206a0f51ac4a12bb722745460ce1b5bb631d3d8e64a797687952ef31f4c03019b16f0f15d65f8dfc9831a              821 main/binary-amd64/Packages.gz
+ c4641ff4d433b01942f8f35cb9fbf87036bc81a1a3919c65e87c23dd4e2bd5849e55429073f9dc28d1db245dd1403152376e1fbc621f141565cd2fb1dce59dea             1341 main/binary-arm64/Packages
+ 3560085351929d5d5ef78153ab0df039f0916c3db4f206a0f51ac4a12bb722745460ce1b5bb631d3d8e64a797687952ef31f4c03019b16f0f15d65f8dfc9831a              821 main/binary-arm64/Packages.gz

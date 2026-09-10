@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gtasks-panel apt repo</title>
+<style>
+body { font-family: sans-serif; max-width: 46em; margin: 3em auto; padding: 0 1em;
+       line-height: 1.5; color: #222; background: #fff; }
+pre { background: #f4f4f4; padding: 1em; overflow-x: auto; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>gtasks-panel apt repo</h1>
+<p>Google Tasks for the XFCE panel. To install the package, run these
+three commands:</p>
+<pre>curl -fsSL https://punkch.github.io/xfce-google-tasks/gtasks-panel.gpg | sudo tee /usr/share/keyrings/gtasks-panel.gpg &gt;/dev/null
+echo "deb [signed-by=/usr/share/keyrings/gtasks-panel.gpg] https://punkch.github.io/xfce-google-tasks stable main" | sudo tee /etc/apt/sources.list.d/gtasks-panel.list
+sudo apt update &amp;&amp; sudo apt install gtasks-panel</pre>
+<p>Source code, releases and the bug tracker:
+<a href="https://github.com/punkch/xfce-google-tasks">https://github.com/punkch/xfce-google-tasks</a></p>
+</body>
+</html>
