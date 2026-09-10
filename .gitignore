@@ -1,4 +1,5 @@
 dist/
+site/
 debian/gtasks-panel/
 debian/.debhelper/
 debian/files

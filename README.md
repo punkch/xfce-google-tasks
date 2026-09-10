@@ -17,17 +17,72 @@ older than `refresh` seconds (default 300), it starts `gtasks-panel
 --fetch` in the background. That process queries Google and writes the
 file. The panel stays responsive when the network is slow.
 
+## Screenshots
+
+The panel item, and the popup that one click opens:
+
+<p>
+<img src="docs/images/panel.png" alt="The panel item: icon and open task count" height="33">
+</p>
+<p>
+<img src="docs/images/popup.png" alt="The popup: open tasks of every list, check buttons, quick-add" width="382">
+<img src="docs/images/popup-due.png" alt="The popup with the due date calendar of one task open" width="382">
+</p>
+
+The full window that a double click opens, with the list menu, the
+delete dialog and a new list on its way:
+
+<p>
+<img src="docs/images/window.png" alt="The full window: lists, tasks, detail pane with title, due date, notes, move and delete" width="720">
+</p>
+<p>
+<img src="docs/images/window-list-menu.png" alt="The row menu of a list: Rename, Mark all done, Clear completed, Delete list" width="480">
+<img src="docs/images/window-delete-list.png" alt="The dialog that asks before a list is deleted" width="480">
+</p>
+<p>
+<img src="docs/images/window-new-list.png" alt="The New list field under the sidebar" width="480">
+</p>
+
+The tasks in the pictures are sample data.
+
 ## Install
 
-Build the Debian package and install it:
+### From the apt repo (recommended)
+
+On a Debian or Ubuntu system with XFCE, add the signing key and the
+repo one time, then install:
+
+```
+curl -fsSL https://punkch.github.io/xfce-google-tasks/gtasks-panel.gpg | sudo tee /usr/share/keyrings/gtasks-panel.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/gtasks-panel.gpg] https://punkch.github.io/xfce-google-tasks stable main" | sudo tee /etc/apt/sources.list.d/gtasks-panel.list
+sudo apt update && sudo apt install gtasks-panel
+```
+
+New versions arrive with `sudo apt upgrade`. After an upgrade run
+`gtasks-window --quit` once, so the next click starts the new version.
+
+### From the .deb file
+
+Download `gtasks-panel_<version>_all.deb` from the
+[latest release](https://github.com/punkch/xfce-google-tasks/releases/latest)
+and install it:
+
+```
+sudo apt install ./gtasks-panel_<version>_all.deb
+```
+
+### From source
 
 ```
 make deb
-sudo apt install ./dist/gtasks-panel_0.2.0_all.deb
+sudo apt install ./dist/gtasks-panel_<version>_all.deb
 ```
 
 The package depends on `xfce4-genmon-plugin`, `xfconf`, `python3-gi`,
 `gir1.2-gtk-3.0`, and the Google API Python packages from apt.
+
+Then do the one-time [Setup](#setup-one-time): your own OAuth client,
+`gtasks-panel --auth`, `gtasks-panel --install-panel`.
 
 ### Upgrading from 0.1.0
 
@@ -114,6 +169,32 @@ resident, so the second and later clicks are fast.
 Two clicks count as a double click when they land less than 400
 milliseconds apart, or less than twice the desktop's double-click
 time when that is larger.
+
+### List actions (full window)
+
+Under the sidebar list:
+
+- **New list**: click "New list". Type the title. Enter creates it.
+  Escape cancels.
+- **Rename**, **Mark all done**, **Clear completed**, **Delete list**:
+  move the mouse over a list row and click the "…" button, or right
+  click the row, or focus the row and press the Menu key. This opens a
+  menu with the four actions. Rename turns the row into a text field;
+  Enter saves the new title, Escape cancels.
+
+Mark all done, Clear completed and Delete list ask first, with a
+dialog. There is no undo: Google deletes the tasks or the list for
+good. The "All lists" row has no menu. Offline, every menu entry is
+grey.
+
+### Due dates
+
+- **Popup, on a task row**: click the date, or the calendar icon when
+  the task has none, to open a small calendar. Pick Today, Tomorrow, a
+  day on the calendar and Set, or Clear.
+- **Quick-add** (popup and full window): click the calendar icon
+  beside the add field before you press Enter. It shows the date you
+  picked, and clears itself once the task is added.
 
 A new task from the quick-add field goes to the list chosen in the
 list chooser or the sidebar. With "All lists" chosen, it goes to the
@@ -223,6 +304,23 @@ under a virtual display:
 GTASKS_UI_TESTS=1 xvfb-run -a python3 -m pytest tests/test_ui_smoke.py
 ```
 
-Bump the version in `debian/changelog` (`dch -v 0.2.1`) and in
-`gtasks_panel/__init__.py` before a new build. The `Makefile` reads the
-package version from `debian/changelog`.
+### Releases
+
+The version lives in `gtasks_panel/__init__.py`. `debian/changelog` is
+history: `make deb` adds an entry with `dch` when the top entry is
+older than that version.
+
+A release is made on GitHub:
+
+1. Work on `development` with conventional commits (`feat:`, `fix:`).
+   The CI workflow builds and checks the package on every push.
+2. Merge `development` into `main` and push. release-please opens a
+   PR "chore(main): release X.Y.Z" that bumps the version and writes
+   `CHANGELOG.md`.
+3. Merge that PR. The Release workflow makes the tag and the GitHub
+   release, builds the deb, attaches it to the release, and publishes
+   the signed apt repo to the `gh-pages` branch
+   (`scripts/publish-apt.sh`, `apt-ftparchive`).
+
+The apt repo signing key is a repository secret (`GPG_PRIVATE_KEY`);
+its fingerprint is the repository variable `APT_SIGNING_KEY`.

@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+    branches: [main, development]
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            debhelper devscripts python3-pytest python3-gi gir1.2-gtk-3.0 \
+            desktop-file-utils lintian xvfb
+
+      # "make deb" runs "make check" (syntax, compileall, man pages, pytest).
+      - name: Build the package
+        run: make deb
+
+      - name: GTK smoke tests
+        run: GTASKS_UI_TESTS=1 xvfb-run -a python3 -m pytest -q -p no:cacheprovider tests/test_ui_smoke.py
+
+      - name: Lintian
+        run: lintian dist/*.deb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gtasks-panel-deb
+          path: dist/*.deb
+
+  # The publish script runs only at release time. Run it here with a
+  # throwaway key, so a broken script does not wait for a real release.
+  apt-repo:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: gtasks-panel-deb
+          path: dist
+
+      - name: Install apt-utils and gnupg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends apt-utils gnupg
+
+      - name: Make a throwaway signing key
+        run: |
+          gpg --batch --pinentry-mode loopback --passphrase '' \
+            --quick-gen-key "ci test <ci@example.com>" ed25519 sign never
+          gpg --list-keys --with-colons "ci test" | awk -F: '/^fpr/{print "APT_SIGNING_KEY=" $10; exit}' >> "$GITHUB_ENV"
+
+      - name: Build the repo
+        run: scripts/publish-apt.sh dist/*.deb "$RUNNER_TEMP/site"
+
+      - name: Verify the repo with apt
+        run: |
+          site="$RUNNER_TEMP/site"
+          gpg --verify "$site/dists/stable/InRelease"
+          grep -q '^Filename: pool/main/' "$site/dists/stable/main/binary-amd64/Packages"
+          apt="$RUNNER_TEMP/apt"
+          mkdir -p "$apt/etc" "$apt/state/lists/partial" "$apt/cache/archives/partial"
+          echo "deb [signed-by=$site/gtasks-panel.gpg] file://$site stable main" > "$apt/etc/sources.list"
+          opts="-o Dir::Etc::sourcelist=$apt/etc/sources.list -o Dir::Etc::sourceparts=- \
+                -o Dir::State=$apt/state -o Dir::Cache=$apt/cache \
+                -o Dir::Etc::trusted=- -o Dir::Etc::trustedparts=-"
+          # shellcheck disable=SC2086
+          apt-get update $opts 2>&1 | tee update.log
+          ! grep -E '^(W|E):' update.log
+          # shellcheck disable=SC2086
+          apt-cache policy $opts gtasks-panel | tee policy.log
+          grep -q 'Candidate: [0-9]' policy.log

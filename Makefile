@@ -4,9 +4,11 @@ BINDIR   = $(DESTDIR)$(PREFIX)/bin
 MANDIR   = $(DESTDIR)$(PREFIX)/share/man/man1
 APPSDIR  = $(DESTDIR)$(PREFIX)/share/applications
 SHAREDIR = $(DESTDIR)$(PREFIX)/share/gtasks-panel
-VERSION := $(shell dpkg-parsechangelog -S Version 2>/dev/null || echo 0.0.0)
+# The one version source. release-please writes it, "changelog" copies it
+# into debian/changelog.
+PKG_VERSION := $(shell sed -n 's/^VERSION *= *"\([^"]*\)".*/\1/p' gtasks_panel/__init__.py)
 
-.PHONY: check install uninstall deb clean
+.PHONY: check install uninstall changelog deb clean
 
 check:
 	python3 -c "import ast; ast.parse(open('bin/gtasks-panel').read(), 'bin/gtasks-panel')"
@@ -46,13 +48,36 @@ uninstall:
 	rm -f $(APPSDIR)/com.belneiski.gtasks.desktop
 	rm -rf $(SHAREDIR)
 
-deb: check
+# debian/changelog is history. It follows gtasks_panel/__init__.py.
+changelog:
+	@new="$(PKG_VERSION)"; \
+	if [ -z "$$new" ]; then \
+	    echo "Error: no VERSION found in gtasks_panel/__init__.py."; exit 1; fi; \
+	cur=$$(dpkg-parsechangelog -S Version); \
+	if [ -z "$$cur" ]; then \
+	    echo "Error: cannot read the version from debian/changelog."; exit 1; fi; \
+	if dpkg --compare-versions "$$cur" lt "$$new"; then \
+	    echo "debian/changelog: $$cur -> $$new"; \
+	    dch --newversion "$$new" --distribution unstable --force-distribution \
+	        --controlmaint "Release $$new. See CHANGELOG.md."; \
+	elif dpkg --compare-versions "$$cur" gt "$$new"; then \
+	    echo "Error: debian/changelog ($$cur) is newer than gtasks_panel/__init__.py ($$new)."; \
+	    echo "Set VERSION in gtasks_panel/__init__.py to $$cur or higher."; \
+	    exit 1; \
+	else \
+	    echo "debian/changelog is at $$cur. Nothing to do."; \
+	fi
+
+# "changelog" can write debian/changelog, so the deb recipe reads the
+# version again in the shell. The make variable is from parse time.
+deb: changelog check
 	dpkg-buildpackage -us -uc -b
 	mkdir -p dist
-	mv ../gtasks-panel_$(VERSION)_all.deb ../gtasks-panel_$(VERSION)_*.buildinfo ../gtasks-panel_$(VERSION)_*.changes dist/
-	@echo "Built dist/gtasks-panel_$(VERSION)_all.deb"
+	@v=$$(dpkg-parsechangelog -S Version); \
+	mv ../gtasks-panel_$${v}_all.deb ../gtasks-panel_$${v}_*.buildinfo ../gtasks-panel_$${v}_*.changes dist/; \
+	echo "Built dist/gtasks-panel_$${v}_all.deb"
 
 clean:
-	rm -rf dist debian/gtasks-panel debian/.debhelper debian/files debian/*.substvars debian/debhelper-build-stamp \
+	rm -rf dist site debian/gtasks-panel debian/.debhelper debian/files debian/*.substvars debian/debhelper-build-stamp \
 	    debian/*.debhelper.log bin/__pycache__ tests/__pycache__ .pytest_cache
 	@find gtasks_panel -name __pycache__ -type d -exec rm -rf {} +
