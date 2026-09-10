@@ -1,0 +1,117 @@
+.TH GTASKS-PANEL 1 "2026-09-09" "gtasks-panel 0.1.0" "User Commands"
+.SH NAME
+gtasks-panel \- Google Tasks counter for the XFCE Generic Monitor plugin
+.SH SYNOPSIS
+.B gtasks-panel
+.br
+.B gtasks-panel
+.B \-\-fetch
+.br
+.B gtasks-panel
+.B \-\-auth
+.br
+.B gtasks-panel
+.B \-\-status
+.br
+.B gtasks-panel
+.B \-\-install\-panel
+.RB [ \-\-period
+.IR SECONDS ]
+.RB [ \-\-panel
+.IR N ]
+.br
+.B gtasks-panel
+.B \-\-uninstall\-panel
+.br
+.B gtasks-panel
+.B \-\-version
+.SH DESCRIPTION
+Without options,
+.B gtasks-panel
+prints XML for the xfce4-genmon-plugin with the number of open Google
+Tasks across all task lists. Genmon runs it on a timer. A click on the
+item runs
+.BR gtasks-open (1).
+.PP
+Genmon blocks the panel while the command runs. So this mode does no
+network I/O. It reads the state file and prints it. When the file is
+older than
+.I refresh
+seconds (config.ini, default 300) it starts
+.B "gtasks-panel \-\-fetch"
+in the background.
+.PP
+The script never changes tasks. It uses the read-only scope
+.IR tasks.readonly .
+.SH OPTIONS
+.TP
+.B \-\-fetch
+Query Google and write the state file. Exits 1 when another fetch runs,
+when sign-in is missing, or when the query fails. The error goes to the
+state file and to the panel tooltip.
+.TP
+.B \-\-auth
+Sign in with Google. Opens a browser for the OAuth consent. Saves the
+token to
+.IR $XDG_STATE_HOME/gtasks-panel/token.json .
+Then runs one fetch.
+.TP
+.B \-\-status
+Print paths, token state, the last count, and the last error as plain
+text.
+.TP
+.B \-\-install\-panel
+Add a Generic Monitor item that runs this script. Inserts it left of the
+system tray on panel
+.I N
+(default 0) with genmon period
+.I SECONDS
+(default 60, minimum 30). Restarts the panel.
+.TP
+.B \-\-uninstall\-panel
+Remove that item. Restarts the panel.
+.TP
+.B \-\-version
+Print the version.
+.SH PANEL STATES
+.TP
+.I number
+Open tasks.
+.TP
+.I number?
+Last known count. The last refresh failed. See the tooltip.
+.TP
+.B \&...
+No count yet. A fetch runs, or the first fetch failed. See the tooltip.
+.TP
+.B setup
+No OAuth client file. Click to open a terminal with
+.BR "gtasks-panel \-\-auth" .
+.TP
+.B "sign in"
+No token, or the token expired or was revoked. Click to sign in.
+.TP
+.B !
+The script crashed. See the tooltip.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/gtasks-panel/client_secret.json
+OAuth client from Google Cloud Console (Desktop app). You add it.
+.TP
+.I $XDG_CONFIG_HOME/gtasks-panel/config.ini
+Optional settings: icon, icon_overdue, label, open_command, refresh.
+.TP
+.I $XDG_STATE_HOME/gtasks-panel/token.json
+Saved sign-in.
+.TP
+.I $XDG_STATE_HOME/gtasks-panel/state.json
+Last count, last error, sign-in state.
+.TP
+.I $XDG_STATE_HOME/gtasks-panel/lock
+Held while a fetch runs.
+.SH NOTES
+An OAuth app in "Testing" status gives tokens that expire after 7 days.
+Set the consent screen to "In production" for a long-lived token.
+.SH SEE ALSO
+.BR gtasks-open (1),
+.BR xfce4-panel (1)

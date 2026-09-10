@@ -1,0 +1,15 @@
+# Optional settings for gtasks-panel.
+# Copy to ~/.config/gtasks-panel/config.ini and change what you need.
+# Every key is optional. Values shown are the defaults.
+
+[panel]
+# Icon name from your icon theme. Empty = no icon.
+icon = task-due
+# Icon when at least one task is overdue. Empty = same as icon.
+icon_overdue = task-past-due
+# Text next to the icon. {count} is the number of open tasks.
+label = {count}
+# Command that runs on click.
+open_command = gtasks-open
+# Seconds between two Google queries. Minimum 30.
+refresh = 300

@@ -1,0 +1,14 @@
+dist/
+debian/gtasks-panel/
+debian/.debhelper/
+debian/files
+debian/*.substvars
+debian/debhelper-build-stamp
+debian/*.debhelper.log
+bin/__pycache__/
+tests/__pycache__/
+.pytest_cache/
+*.deb
+*.buildinfo
+*.changes
+share/client_secret.json

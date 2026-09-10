@@ -1,0 +1,29 @@
+Source: gtasks-panel
+Section: x11
+Priority: optional
+Maintainer: Pencho BELNEYSKI <pencho@belneiski.com>
+Build-Depends: debhelper-compat (= 13), python3, python3-pytest <!nocheck>
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+
+Package: gtasks-panel
+Architecture: all
+Depends: ${misc:Depends},
+         python3,
+         python3-googleapi,
+         python3-google-auth-oauthlib,
+         python3-google-auth-httplib2,
+         python3-httplib2,
+         xfce4-genmon-plugin,
+         xfconf,
+         wmctrl
+Recommends: google-chrome-stable | chromium,
+            xfce4-terminal | x-terminal-emulator
+Description: Google Tasks counter for the XFCE panel
+ Shows the number of open Google Tasks in the XFCE panel through the
+ Generic Monitor (genmon) plugin. A click focuses the Google Tasks app
+ window, or opens one as a Chrome app window with its own profile.
+ .
+ After install: put your OAuth client_secret.json in
+ ~/.config/gtasks-panel/, run "gtasks-panel --auth", then
+ "gtasks-panel --install-panel".
