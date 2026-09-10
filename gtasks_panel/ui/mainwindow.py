@@ -6,21 +6,23 @@ from typing import NamedTuple
 import gi
 
 gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
 
-from gi.repository import Gio, GLib, Gtk  # noqa: E402  (after require_version)
+from gi.repository import Gdk, Gio, GLib, Gtk, Pango  # noqa: E402  (after require_version)
 
 from .. import state  # noqa: E402  (after require_version)
-from ..model import Task, due_text, summary  # noqa: E402  (after require_version)
+from ..model import Task, TaskList, is_overdue, summary  # noqa: E402
 from .signin import SignInPage  # noqa: E402  (after require_version)
 from .store import ALL_LISTS  # noqa: E402  (after require_version)
-from .widgets import (ADD_PLACEHOLDER, OFFLINE_TEXT, ListRow,  # noqa: E402
-                      TaskRow, clear, placeholder_row, quick_add, scrolled,
-                      set_margins)
+from .widgets import (ADD_PLACEHOLDER, NO_LIST_TEXT, OFFLINE_TEXT,  # noqa: E402
+                      DueButton, ListRow, TaskRow, add_from_entry, clear,
+                      confirm, placeholder_row, scrolled, set_margins)
 
 DEFAULT_WIDTH = 960
 DEFAULT_HEIGHT = 600
 SAVE_DELAY_MS = 500     # wait for the drag to stop before saving the size
 UNDO_SECONDS = 8        # a deleted task can come back for this long
+NEW_LIST_PLACEHOLDER = "List title"
 
 
 class PendingDelete(NamedTuple):
@@ -46,6 +48,12 @@ class MainWindow(Gtk.ApplicationWindow):
         self._save_id = 0
         self._pending_delete: PendingDelete | None = None
         self._move_key: list | None = None
+        self._editing: tuple[str, str] | None = None   # list id and new title
+        self._rename_entry: Gtk.Entry | None = None
+        self._rename_fresh = False                # the rename only started
+        self._row_menu: Gtk.Menu | None = None
+        # An attribute, so that a test can answer the dialog without one.
+        self.confirm = confirm
 
         saved = state.load_window_state()
         # The size we start with is also the size on the disk. Keep it, so
@@ -103,11 +111,34 @@ class MainWindow(Gtk.ApplicationWindow):
         outer.pack2(inner, True, False)
         return outer
 
-    def _build_sidebar(self) -> Gtk.ScrolledWindow:
+    def _build_sidebar(self) -> Gtk.Box:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self.list_box = Gtk.ListBox()
         self.list_box.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self.list_box.connect("row-selected", self._on_list_selected)
-        return scrolled(self.list_box)
+        box.pack_start(scrolled(self.list_box), True, True, 0)
+
+        # The entry stays out of the ListBox: a refresh empties the box
+        # and would take a half-typed title with it.
+        self.new_list_entry = Gtk.Entry(placeholder_text=NEW_LIST_PLACEHOLDER)
+        self.new_list_entry.set_no_show_all(True)
+        for side in ("margin_start", "margin_end", "margin_top", "margin_bottom"):
+            self.new_list_entry.set_property(side, 6)
+        self.new_list_entry.connect("activate", self._new_list_done)
+        self.new_list_entry.connect("key-press-event", self._on_new_list_key)
+        box.pack_start(self.new_list_entry, False, False, 0)
+
+        self.new_list_button = Gtk.Button()
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        row.pack_start(Gtk.Image.new_from_icon_name("list-add-symbolic",
+                                                    Gtk.IconSize.BUTTON),
+                       False, False, 0)
+        row.pack_start(Gtk.Label(label="New list", xalign=0.0), True, True, 0)
+        self.new_list_button.add(row)
+        self.new_list_button.set_relief(Gtk.ReliefStyle.NONE)
+        self.new_list_button.connect("clicked", self._show_new_list)
+        box.pack_start(self.new_list_button, False, False, 0)
+        return box
 
     def _build_centre(self) -> Gtk.Box:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
@@ -118,11 +149,15 @@ class MainWindow(Gtk.ApplicationWindow):
         self.add_entry = Gtk.Entry(placeholder_text=ADD_PLACEHOLDER)
         self.add_entry.connect("activate", self._add_task)
         bar.pack_start(self.add_entry, True, True, 0)
+        self.add_due_button = DueButton(self._pick_add_due,
+                                        tooltip="Due date of the new task")
+        bar.pack_start(self.add_due_button, False, False, 0)
         self.add_button = Gtk.Button(label="Add")
         self.add_button.connect("clicked", lambda *_args: self._add_task(self.add_entry))
         bar.pack_start(self.add_button, False, False, 0)
 
-        self.completed_toggle = Gtk.ToggleButton(label="Show completed")
+        # A check button: a filled toggle looks like the main action.
+        self.completed_toggle = Gtk.CheckButton(label="Show completed")
         self.completed_toggle.connect("toggled", self._on_show_completed)
         bar.pack_start(self.completed_toggle, False, False, 0)
 
@@ -146,6 +181,14 @@ class MainWindow(Gtk.ApplicationWindow):
         self.task_box.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self.task_box.connect("row-selected", self._on_task_selected)
         box.pack_start(scrolled(self.task_box), True, True, 0)
+
+        # Progress of a long job, "Nothing to do." and the like.
+        self.status = Gtk.Label(label="", xalign=0.0)
+        self.status.set_ellipsize(Pango.EllipsizeMode.END)
+        self.status.get_style_context().add_class("gtasks-small")
+        for side in ("margin_start", "margin_end", "margin_bottom"):
+            self.status.set_property(side, 6)
+        box.pack_end(self.status, False, False, 0)
         return box
 
     def _build_detail(self) -> Gtk.Stack:
@@ -164,8 +207,8 @@ class MainWindow(Gtk.ApplicationWindow):
 
         due_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         due_row.pack_start(Gtk.Label(label="Due", xalign=0.0), False, False, 0)
-        self.due_button = Gtk.MenuButton(label="None")
-        self.due_button.set_popover(self._build_calendar())
+        self.due_button = DueButton(self._set_due, tooltip="Due date of this task")
+        self.due_button.set_relief(Gtk.ReliefStyle.NORMAL)
         due_row.pack_start(self.due_button, False, False, 0)
         box.pack_start(due_row, False, False, 0)
 
@@ -196,26 +239,6 @@ class MainWindow(Gtk.ApplicationWindow):
         self.detail_stack.add_named(box, "task")
         return self.detail_stack
 
-    def _build_calendar(self) -> Gtk.Popover:
-        popover = Gtk.Popover()
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        set_margins(box, 6)
-        self.calendar = Gtk.Calendar()
-        self.calendar.connect("day-selected-double-click",
-                              lambda *_args: self._set_due(self._calendar_date()))
-        box.pack_start(self.calendar, True, True, 0)
-        buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        clear_button = Gtk.Button(label="Clear")
-        clear_button.connect("clicked", lambda *_args: self._clear_due())
-        buttons.pack_start(clear_button, True, True, 0)
-        set_button = Gtk.Button(label="Set")
-        set_button.connect("clicked", lambda *_args: self._set_due(self._calendar_date()))
-        buttons.pack_start(set_button, True, True, 0)
-        box.pack_start(buttons, False, False, 0)
-        popover.add(box)
-        box.show_all()
-        return popover
-
     # -- redraw -----------------------------------------------------------
 
     def refresh(self, _store=None) -> None:
@@ -231,6 +254,9 @@ class MainWindow(Gtk.ApplicationWindow):
         self._refresh_offline_bar()
         self.add_entry.set_editable(writable)
         self.add_button.set_sensitive(writable)
+        self.add_due_button.set_sensitive(writable)
+        self.new_list_button.set_sensitive(writable)
+        self.new_list_entry.set_editable(writable)
         if self.completed_toggle.get_active() != store.show_completed:
             self._loading = True
             self.completed_toggle.set_active(store.show_completed)
@@ -240,6 +266,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.notes_view.set_editable(writable)
         for widget in (self.due_button, self.move_combo, self.delete_button):
             widget.set_sensitive(writable)
+        self.status.set_text(store.status)
         self._rebuild_sidebar()
         self._rebuild_tasks(writable, today)
         self._refresh_detail(today)
@@ -258,6 +285,15 @@ class MainWindow(Gtk.ApplicationWindow):
     def _rebuild_sidebar(self) -> None:
         store = self.store
         self._rebuilding = True
+        # Take the cursor back only when it was in the entry we destroy.
+        # A redraw must not pull the user out of another field.
+        refocus = self._rename_fresh or (self._rename_entry is not None
+                                         and self.get_focus() is self._rename_entry)
+        self._rename_entry = None
+        # The list under rename can be gone: another window deleted it.
+        if self._editing and store.find_list(self._editing[0]) is None:
+            self._editing = None
+            self._rename_fresh = False
         clear(self.list_box)
         counts = summary(store.lists)
         rows = [(ALL_LISTS, store.list_title(ALL_LISTS), counts["count"])]
@@ -265,14 +301,53 @@ class MainWindow(Gtk.ApplicationWindow):
                  for item, (_title, count) in zip(store.lists, counts["lists"])]
         chosen = None
         for list_id, title, count in rows:
-            row = ListRow(list_id, title, count)
+            if self._editing and self._editing[0] == list_id:
+                row = self._rename_row(list_id, self._editing[1])
+            else:
+                # Only a real task list has actions. "All lists" has none.
+                row = ListRow(list_id, title, count,
+                              on_menu=None if list_id is ALL_LISTS else self._open_list_menu)
             self.list_box.add(row)
             if list_id == store.selected_list_id:
                 chosen = row
         self.list_box.show_all()
         if chosen is not None:
             self.list_box.select_row(chosen)
+        if refocus:
+            self._focus_rename_entry()
         self._rebuilding = False
+
+    def _rename_row(self, list_id: str, text: str) -> Gtk.ListBoxRow:
+        """The sidebar row of a list that the user renames now."""
+        row = Gtk.ListBoxRow()
+        row.list_id = list_id
+        # A click on it must not change the chosen list under the entry.
+        row.set_selectable(False)
+        entry = Gtk.Entry()
+        entry.set_text(text)
+        entry.set_margin_top(2)
+        entry.set_margin_bottom(2)
+        entry.set_margin_start(6)
+        entry.set_margin_end(6)
+        # Connect after set_text, or the line above looks like typing.
+        entry.connect("changed", self._on_rename_changed)
+        entry.connect("activate", self._rename_done)
+        entry.connect("key-press-event", self._on_rename_key)
+        row.add(entry)
+        self._rename_entry = entry
+        return row
+
+    def _focus_rename_entry(self) -> None:
+        """Put the cursor back in the entry that the rebuild made again."""
+        if self._rename_entry is None:
+            return
+        self._rename_entry.grab_focus()
+        if self._rename_fresh:
+            self._rename_fresh = False   # the old title stays selected
+        else:
+            # grab_focus selects every character. In the middle of a
+            # rename that would let the next key wipe the title.
+            self._rename_entry.set_position(-1)
 
     def _rebuild_tasks(self, writable: bool, today: dt.date) -> None:
         self._rebuilding = True
@@ -312,10 +387,7 @@ class MainWindow(Gtk.ApplicationWindow):
         if (force or not self.notes_view.has_focus()) \
                 and _buffer_text(buffer) != task.notes:
             buffer.set_text(task.notes)
-        self.due_button.set_label(due_text(task.due, today) or "None")
-        if task.due:
-            self.calendar.select_month(task.due.month - 1, task.due.year)
-            self.calendar.select_day(task.due.day)
+        self.due_button.show_date(task.due, today, is_overdue(task, today))
         # Rebuilding the combo makes it drop its list. Only do it when
         # the task lists really changed.
         key = [(item.id, item.title) for item in self.store.lists]
@@ -350,7 +422,13 @@ class MainWindow(Gtk.ApplicationWindow):
             self.worker.uncomplete(task)
 
     def _add_task(self, entry: Gtk.Entry) -> None:
-        quick_add(entry, self.store, self.worker, self.default_list)
+        if not add_from_entry(entry, self.add_due_button, self.store, self.worker,
+                              self.default_list):
+            self.store.set_status(NO_LIST_TEXT)
+
+    def _pick_add_due(self, date: dt.date | None) -> None:
+        """The due date the next new task gets. The button keeps it."""
+        self.add_due_button.show_date(date)
 
     def _on_title_focus_out(self, *_args) -> bool:
         self._save_title()
@@ -376,20 +454,12 @@ class MainWindow(Gtk.ApplicationWindow):
         if notes != task.notes:
             self.worker.patch(task, notes=notes)
 
-    def _calendar_date(self) -> dt.date:
-        year, month, day = self.calendar.get_date()
-        return dt.date(year, month + 1, day)  # Gtk months start at 0
-
     def _set_due(self, date: dt.date | None) -> None:
         task = self.detail_task
         if self._loading or task is None:
             return
         if date != task.due:
             self.worker.patch(task, due=date)
-        self.due_button.get_popover().popdown()
-
-    def _clear_due(self) -> None:
-        self._set_due(None)
 
     def _on_move(self, combo: Gtk.ComboBoxText) -> None:
         task = self.detail_task
@@ -409,6 +479,132 @@ class MainWindow(Gtk.ApplicationWindow):
         # one time only.
         if show and not self.store.has_completed:
             self.worker.reload()
+
+    # -- task list actions ------------------------------------------------
+
+    def _show_new_list(self, *_args) -> None:
+        """The New list button: show the entry and put the cursor in it."""
+        self.new_list_entry.set_text("")
+        # The button goes: the entry is the button now.
+        self.new_list_button.set_visible(False)
+        self.new_list_entry.set_visible(True)
+        self.new_list_entry.grab_focus()
+
+    def _hide_new_list(self) -> None:
+        self.new_list_entry.set_text("")
+        self.new_list_entry.set_visible(False)
+        self.new_list_button.set_visible(True)
+
+    def _new_list_done(self, entry: Gtk.Entry) -> None:
+        title = entry.get_text().strip()
+        self._hide_new_list()
+        if title:
+            self.worker.add_list(title)
+
+    def _on_new_list_key(self, _entry, event) -> bool:
+        if event.keyval == Gdk.KEY_Escape:
+            self._hide_new_list()
+            return True
+        return False
+
+    def _open_list_menu(self, row, event=None) -> None:
+        """The row menu of one task list, from the button or a right click."""
+        list_ = self.store.find_list(row.list_id)
+        if list_ is None:
+            return
+        if self._row_menu is not None:
+            self._row_menu.destroy()
+        menu = self._row_menu = self._build_list_menu(list_)
+        menu.attach_to_widget(row)
+        if event is not None:
+            menu.popup_at_pointer(event)
+        else:
+            under = row.menu_button if row.menu_button is not None else row
+            menu.popup_at_widget(under, Gdk.Gravity.SOUTH_WEST,
+                                 Gdk.Gravity.NORTH_WEST, Gtk.get_current_event())
+
+    def _build_list_menu(self, list_: TaskList) -> Gtk.Menu:
+        """Rename, Mark all done, Clear completed, Delete list."""
+        menu = Gtk.Menu()
+        writable = not self.store.offline
+        actions = (("Rename", self._start_rename),
+                   ("Mark all done", self._complete_all),
+                   ("Clear completed", self._clear_completed),
+                   ("Delete list", self._delete_list))
+        for label, handler in actions:
+            item = Gtk.MenuItem(label=label)
+            item.set_sensitive(writable)   # offline nothing can be written
+            item.connect("activate", handler, list_)
+            menu.append(item)
+        menu.show_all()
+        return menu
+
+    def _current(self, list_: TaskList) -> TaskList:
+        """The list as the store holds it now. A reload can replace the object
+        while the menu is open."""
+        return self.store.find_list(list_.id) or list_
+
+    def _start_rename(self, _item, list_: TaskList) -> None:
+        list_ = self._current(list_)
+        self._editing = (list_.id, list_.title)
+        self._rename_fresh = True
+        # The redraw makes the row again, this time as an entry.
+        self.store.notify()
+
+    def _on_rename_changed(self, entry: Gtk.Entry) -> None:
+        """Keep the text the user types, so a redraw cannot lose it."""
+        if self._editing:
+            self._editing = (self._editing[0], entry.get_text())
+
+    def _rename_done(self, entry: Gtk.Entry) -> None:
+        editing, self._editing = self._editing, None
+        title = entry.get_text().strip()
+        list_ = self.store.find_list(editing[0]) if editing else None
+        if list_ is not None and title and title != list_.title:
+            self.worker.rename_list(list_, title)
+        self.store.notify()
+
+    def _on_rename_key(self, _entry, event) -> bool:
+        if event.keyval == Gdk.KEY_Escape:
+            self._editing = None
+            self.store.notify()
+            return True
+        return False
+
+    def _complete_all(self, _item, list_: TaskList) -> None:
+        list_ = self._current(list_)
+        count = self.store.open_count(list_.id)
+        if not count:
+            self.store.set_status("Nothing to do.")
+            return
+        tasks = "task" if count == 1 else "tasks"
+        if self.confirm(self, "Mark all done",
+                        f"Mark {count} open {tasks} in “{list_.title}” as done?",
+                        "Mark done", destructive=False):
+            self.worker.complete_all(list_)
+
+    def _clear_completed(self, _item, list_: TaskList) -> None:
+        list_ = self._current(list_)
+        # The window holds the completed tasks only with Show completed
+        # on, so the question has no count. The job reads them itself.
+        if self.confirm(self, "Clear completed",
+                        f"Delete all completed tasks in “{list_.title}”? "
+                        "This cannot be undone.", "Delete"):
+            self.worker.clear_completed(list_)
+
+    def _delete_list(self, _item, list_: TaskList) -> None:
+        list_ = self._current(list_)
+        if not self.confirm(self, "Delete list",
+                            f"Delete list “{list_.title}” and all its tasks? "
+                            "This cannot be undone.", "Delete"):
+            return
+        # A task of this list can wait behind the undo bar. The user just
+        # said "delete all its tasks", so send that delete now. The jobs
+        # run in order, so it lands before the list goes.
+        pending = self._pending_delete
+        if pending is not None and pending.task.list_id == list_.id:
+            self._delete_now()
+        self.worker.delete_list(list_)
 
     # -- delayed delete ---------------------------------------------------
 
@@ -501,6 +697,9 @@ class MainWindow(Gtk.ApplicationWindow):
             GLib.source_remove(self._save_id)
             self._save_id = 0
         self._save_size()
+        if self._row_menu is not None:
+            self._row_menu.destroy()
+            self._row_menu = None
         self.hide()  # the next double click shows it again
         return True
 

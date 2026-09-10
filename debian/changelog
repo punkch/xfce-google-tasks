@@ -1,3 +1,18 @@
+gtasks-panel (0.3.0) unstable; urgency=medium
+
+  * Task list management in the full window: New list, and a row menu
+    with Rename, Mark all done, Clear completed and Delete list. The
+    menu opens with a right click on the row or with the "..." button.
+  * Mark all done, Clear completed and Delete list ask first. Delete is
+    permanent in Google Tasks.
+  * Due dates in the popup: a calendar button on each task row and one
+    beside the quick-add field. The full window quick-add has one too.
+  * The calendar has Today, Tomorrow, Clear and Set buttons.
+  * After an upgrade run "gtasks-window --quit" one time: the old
+    process stays resident.
+
+ -- Pencho BELNEYSKI <pencho@belneiski.com>  Thu, 10 Sep 2026 14:40:16 +0200
+
 gtasks-panel (0.2.0) unstable; urgency=medium
 
   * Own GTK 3 window instead of the Chrome app window. One click on the

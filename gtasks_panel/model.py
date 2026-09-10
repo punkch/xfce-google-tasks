@@ -63,9 +63,14 @@ def task_from_api(item: dict, list_id: str) -> Task:
     )
 
 
-def tasklist_from_api(item: dict, tasks: list[Task]) -> TaskList:
-    """Make a TaskList from one `tasklists.list` item and its tasks."""
-    return TaskList(id=item.get("id") or "", title=item.get("title") or "?", tasks=tasks)
+def tasklist_from_api(item: dict, tasks: list[Task] | None = None) -> TaskList:
+    """Make a TaskList from one `tasklists` item and its tasks.
+
+    `tasklists.insert` and `tasklists.patch` give no tasks. Then the new
+    list starts empty.
+    """
+    return TaskList(id=item.get("id") or "", title=item.get("title") or "?",
+                    tasks=tasks if tasks is not None else [])
 
 
 def open_tasks(tasks: list[Task]) -> list[Task]:

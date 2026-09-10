@@ -46,6 +46,22 @@ def list_tasklists(service) -> list[dict]:
         maxResults=PAGE_SIZE, fields="items(id,title),nextPageToken")))
 
 
+def insert_tasklist(service, title: str) -> TaskList:
+    """Make a new task list. It starts empty."""
+    return tasklist_from_api(service.tasklists().insert(body={"title": title}).execute())
+
+
+def rename_tasklist(service, list_id: str, title: str) -> TaskList:
+    """Give a task list a new title. The title is the only writable field."""
+    return tasklist_from_api(
+        service.tasklists().patch(tasklist=list_id, body={"title": title}).execute())
+
+
+def delete_tasklist(service, list_id: str) -> None:
+    """Delete a task list and its tasks. Google keeps no copy."""
+    service.tasklists().delete(tasklist=list_id).execute()
+
+
 def list_tasks(service, list_id: str, show_completed: bool = False) -> list[dict]:
     """All tasks of one list as API items.
 
@@ -128,3 +144,37 @@ def move_task(service, list_id: str, task_id: str,
 def delete_task(service, list_id: str, task_id: str) -> None:
     """Delete a task. Google keeps no copy."""
     service.tasks().delete(tasklist=list_id, task=task_id).execute()
+
+
+def clear_completed(service, list_id: str, progress=None) -> list[str]:
+    """Delete every done task of one list. Returns the ids it deleted.
+
+    The window holds the done tasks only when "Show completed" is on, so
+    this asks Google for them. `progress(index, total)` runs after each
+    delete. The first error stops the work and comes out of here: the
+    caller must read the list again.
+    """
+    items = [item for item in list_tasks(service, list_id, show_completed=True)
+             if item.get("status") == STATUS_DONE and item.get("id")]
+    deleted = []
+    for index, item in enumerate(items, start=1):
+        delete_task(service, list_id, item["id"])
+        deleted.append(item["id"])
+        if progress:
+            progress(index, len(items))
+    return deleted
+
+
+def complete_all(service, list_id: str, tasks: list[Task], progress=None) -> list[Task]:
+    """Mark every open task of `tasks` done. Returns the fresh tasks.
+
+    `progress(index, total)` runs after each task. The first error stops
+    the work and comes out of here, as for `clear_completed`.
+    """
+    still_open = [task for task in tasks if task.status != STATUS_DONE and task.id]
+    written = []
+    for index, task in enumerate(still_open, start=1):
+        written.append(complete_task(service, list_id, task.id))
+        if progress:
+            progress(index, len(still_open))
+    return written

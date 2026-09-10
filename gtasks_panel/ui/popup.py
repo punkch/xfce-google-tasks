@@ -9,15 +9,17 @@ import datetime as dt
 import gi
 
 gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
 
 from gi.repository import Gdk, Gtk, Pango  # noqa: E402  (after require_version)
 
-from ..model import summary  # noqa: E402  (after require_version)
+from ..model import Task, summary  # noqa: E402  (after require_version)
 from .click import HEIGHT, WIDTH, place  # noqa: E402  (after require_version)
 from .signin import SignInPage  # noqa: E402  (after require_version)
 from .store import ALL_LISTS  # noqa: E402  (after require_version)
-from .widgets import (ADD_PLACEHOLDER, OFFLINE_TEXT, TaskRow,  # noqa: E402
-                      clear, placeholder_row, quick_add, scrolled, set_margins)
+from .widgets import (ADD_PLACEHOLDER, NO_LIST_TEXT, OFFLINE_TEXT,  # noqa: E402
+                      DueButton, TaskRow, add_from_entry, clear,
+                      placeholder_row, scrolled, set_margins)
 
 
 class Popup(Gtk.Window):
@@ -31,6 +33,7 @@ class Popup(Gtk.Window):
         self.on_open_window = on_open_window
         self.on_reload = on_reload
         self._chooser_key = None
+        self._stale = False   # a change came while the popup was hidden
 
         self.set_title("Google Tasks")
         self.set_decorated(False)
@@ -75,12 +78,18 @@ class Popup(Gtk.Window):
         self.chooser.set_popover(popover)
         outer.pack_start(self.chooser, False, False, 0)
 
+        # The entry and the due button of a new task stand side by side.
+        add_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         self.entry = Gtk.Entry(placeholder_text=ADD_PLACEHOLDER)
         self.entry.set_icon_from_icon_name(Gtk.EntryIconPosition.SECONDARY,
                                            "list-add-symbolic")
         self.entry.connect("activate", self._add_task)
         self.entry.connect("icon-press", lambda *_args: self._add_task(self.entry))
-        outer.pack_start(self.entry, False, False, 0)
+        add_row.pack_start(self.entry, True, True, 0)
+        self.add_due_button = DueButton(self._pick_add_due,
+                                        tooltip="Due date of the new task")
+        add_row.pack_start(self.add_due_button, False, False, 0)
+        outer.pack_start(add_row, False, False, 0)
 
         self.stack = Gtk.Stack()
         self.list_box = Gtk.ListBox()
@@ -118,6 +127,9 @@ class Popup(Gtk.Window):
             self.move(*place(pointer_x, pointer_y,
                              area.x, area.y, area.width, area.height))
         self.show_all()
+        # Now it is visible, so the redraw is not skipped.
+        if self._stale:
+            self.refresh()
         self.present()
         self.entry.grab_focus()
 
@@ -140,11 +152,18 @@ class Popup(Gtk.Window):
     # -- redraw -----------------------------------------------------------
 
     def refresh(self, _store=None) -> None:
+        # A hidden popup does not redraw. Every change rebuilds all rows,
+        # and a long job sends many changes. It redraws when it shows.
+        if not self.get_visible() and self.get_realized():
+            self._stale = True
+            return
+        self._stale = False
         store = self.store
         if store.needs_signin:
             self.signin_page.show_for(store.auth)
             self.stack.set_visible_child(self.signin_page)
             self.entry.set_sensitive(False)
+            self.add_due_button.set_sensitive(False)
             self.chooser.set_sensitive(False)
             self.status.set_text("")
             return
@@ -155,6 +174,7 @@ class Popup(Gtk.Window):
         self.entry.set_sensitive(True)
         self.entry.set_editable(writable)
         self.entry.set_icon_sensitive(Gtk.EntryIconPosition.SECONDARY, writable)
+        self.add_due_button.set_sensitive(writable)
         self.chooser.set_sensitive(True)
         self._refresh_chooser()
         self._refresh_tasks(writable)
@@ -188,7 +208,8 @@ class Popup(Gtk.Window):
                                          open_only=True, today=today)
         for task in tasks:
             self.list_box.add(TaskRow(task, self._toggle_task, editable=writable,
-                                      today=today))
+                                      today=today, due_picker=True,
+                                      on_due=self._set_due))
         if not tasks:
             self.list_box.add(placeholder_row("No open tasks."))
         self.list_box.show_all()
@@ -205,7 +226,7 @@ class Popup(Gtk.Window):
         label = Gtk.Label(label=self.store.list_title(row.task.list_id), xalign=0.0)
         style = label.get_style_context()
         style.add_class("gtasks-small")
-        style.add_class("gtasks-dim")
+        style.add_class("gtasks-header")
         label.set_margin_top(6)
         label.set_margin_bottom(2)
         label.set_margin_start(6)
@@ -224,9 +245,19 @@ class Popup(Gtk.Window):
         else:
             self.worker.uncomplete(task)
 
+    def _set_due(self, task: Task, date: dt.date | None) -> None:
+        """A pick in the due button of a task row."""
+        if date != task.due:
+            self.worker.patch(task, due=date)
+
+    def _pick_add_due(self, date: dt.date | None) -> None:
+        """The due date the next new task gets. The button keeps it."""
+        self.add_due_button.show_date(date)
+
     def _add_task(self, entry: Gtk.Entry) -> None:
-        if not quick_add(entry, self.store, self.worker, self.default_list):
-            self.status.set_text("No task list to add to.")
+        if not add_from_entry(entry, self.add_due_button, self.store, self.worker,
+                              self.default_list):
+            self.status.set_text(NO_LIST_TEXT)
 
 
 def _pointer_position() -> tuple[int, int] | None:

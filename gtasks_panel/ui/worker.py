@@ -6,6 +6,7 @@ GTK thread again. There is one thread only: `httplib2.Http` and the
 credential refresh are not thread safe.
 """
 
+import datetime as dt
 import queue
 import sys
 import threading
@@ -14,7 +15,7 @@ from typing import Callable, NamedTuple
 from gi.repository import GLib
 
 from .. import api, auth, panel, state
-from ..model import STATUS_DONE, STATUS_OPEN, Task, TaskList
+from ..model import STATUS_DONE, STATUS_OPEN, Task, TaskList, open_tasks
 from ..paths import AUTH_OK, AUTH_REAUTH
 
 PANEL_RETRY_SECONDS = 5  # wait for a --fetch to let go of the state file lock
@@ -174,12 +175,12 @@ class Worker:
         self.post(lambda service: api.uncomplete_task(service, task.list_id, task.id),
                   self._written, lambda _exc: self.set_done(task, True))
 
-    def add(self, list_id: str, title: str) -> None:
+    def add(self, list_id: str, title: str, due: dt.date | None = None) -> None:
         def done(task: Task) -> None:
             self.store.add_task(task, 0)
             self._notify_panel()
 
-        self.post(lambda service: api.insert_task(service, list_id, title), done)
+        self.post(lambda service: api.insert_task(service, list_id, title, due=due), done)
 
     def patch(self, task: Task, **fields) -> None:
         """Change title, notes or due. The view shows it before Google does."""
@@ -221,7 +222,89 @@ class Worker:
         self.post(lambda service: api.delete_task(service, task.list_id, task.id),
                   self._written, failed)
 
+    # -- jobs on a whole task list -----------------------------------------
+
+    def add_list(self, title: str) -> None:
+        """Make a new list and show it."""
+        def done(new_list: TaskList) -> None:
+            self.store.add_list(new_list)
+            self.store.set_selected(new_list.id)
+            self._notify_panel()
+
+        self.post(lambda service: api.insert_tasklist(service, title), done)
+
+    def rename_list(self, list_: TaskList, title: str) -> None:
+        """Give a list a new title. The view shows it before Google does."""
+        old = list_.title
+        self.store.rename_list(list_.id, title)
+
+        def done(fresh: TaskList) -> None:
+            self.store.replace_list(fresh)   # the title as Google kept it
+            self._notify_panel()             # the panel tooltip names the lists
+
+        def failed(_exc) -> None:
+            self.store.rename_list(list_.id, old)
+
+        self.post(lambda service: api.rename_tasklist(service, list_.id, title),
+                  done, failed)
+
+    def delete_list(self, list_: TaskList) -> None:
+        """Delete a list for good. The row goes only when Google agrees."""
+        def done(_result) -> None:
+            self.store.remove_list(list_.id)
+            self._notify_panel()
+
+        self.post(lambda service: api.delete_tasklist(service, list_.id), done)
+
+    def clear_completed(self, list_: TaskList) -> None:
+        """Delete every done task of one list.
+
+        This is one Google call for each task, so the job counts them out
+        in the status line. An error in the middle leaves a part of the
+        work done: then we read the list again.
+        """
+        list_id = list_.id
+
+        def progress(index: int, total: int) -> None:  # the worker thread
+            GLib.idle_add(self._show_progress, f"Deleting {index} of {total}…")
+
+        def done(ids: list[str]) -> None:
+            self.store.remove_tasks(list_id, ids)
+            self._notify_panel()
+
+        self.post(lambda service: api.clear_completed(service, list_id, progress),
+                  done, self._reload_after_error)
+
+    def complete_all(self, list_: TaskList) -> None:
+        """Mark every open task of one list done. One call for each task."""
+        list_id = list_.id
+        tasks = open_tasks((self.store.find_list(list_id) or list_).tasks)
+
+        def progress(index: int, total: int) -> None:  # the worker thread
+            GLib.idle_add(self._show_progress, f"Marking {index} of {total} done…")
+
+        def done(written: list[Task]) -> None:
+            for task in written:
+                self.store.replace_task(task)
+            self._notify_panel()
+
+        self.post(lambda service: api.complete_all(service, list_id, tasks, progress),
+                  done, self._reload_after_error)
+
     # -- helpers ----------------------------------------------------------
+
+    def _show_progress(self, text: str) -> bool:
+        """Put the count of a long job in the status line. GTK thread.
+
+        GLib runs an idle callback again while it answers True, and
+        `set_status` answers True when the text changed. So say False.
+        """
+        self.store.set_status(text)
+        return False
+
+    def _reload_after_error(self, _exc) -> None:
+        """A long job stopped in the middle. Ask Google what is there now."""
+        self.reload()
 
     def set_done(self, task: Task, done: bool) -> None:
         """Show a task as done, or open again, before Google answers."""

@@ -1,4 +1,4 @@
-.TH GTASKS-WINDOW 1 "2026-09-10" "gtasks-panel 0.2.0" "User Commands"
+.TH GTASKS-WINDOW 1 "2026-09-10" "gtasks-panel 0.3.0" "User Commands"
 .SH NAME
 gtasks\-window \- see and change Google Tasks in a GTK window
 .SH SYNOPSIS
@@ -25,9 +25,10 @@ window is therefore fast from the second click on.
 .TP
 .B "single click"
 A small popup opens under the pointer. It lists the open tasks with a
-check button for each one, a field to add a task, a list chooser, and a
-button that opens the full window. A second single click closes it. The
-popup also closes on Escape or when it loses the focus.
+check button and a due date button for each one, a field to add a task
+with its own due date button, a list chooser, and a button that opens
+the full window. A second single click closes it. The popup also closes
+on Escape or when it loses the focus.
 .TP
 .B "double click"
 The full window opens: task lists on the left, tasks in the middle,
@@ -38,6 +39,49 @@ task to another list, and delete a task.
 Two clicks count as a double click when they are less than 400
 milliseconds apart, or less than twice the GTK double-click time when
 that is larger.
+.SH TASK LISTS
+The full window makes and changes task lists. The popup does not.
+.TP
+.B "New list"
+The button under the task lists shows a field. Type a title and push
+Enter. Escape or an empty field stops it.
+.TP
+.B "row menu"
+A right click on a task list, or the
+.B "..."
+button that comes with the pointer, opens a menu with four actions. The
+Menu key on the keyboard opens the same menu. The menu is off when there
+is no network.
+.TP
+.B Rename
+The row becomes a field with the title in it. Enter saves, Escape stops.
+.TP
+.B "Mark all done"
+Marks every open task of the list done. It asks first and names the
+number of tasks. It is one Google call for each task, so the popup shows
+a count while it runs.
+.TP
+.B "Clear completed"
+Deletes every completed task of the list. It asks first. This cannot be
+undone.
+.TP
+.B "Delete list"
+Deletes the task list and all of its tasks. It asks first. This cannot
+be undone. Google can refuse to delete a list; then the window shows the
+answer from Google.
+.SH DUE DATES
+A button with a calendar icon opens a small calendar. It has the buttons
+.IR Today ,
+.IR Tomorrow ,
+.I Clear
+and
+.IR Set .
+A double click on a day in the calendar sets that day.
+.PP
+In the popup there is one such button on each task row and one beside
+the field that adds a task. In the full window there is one beside the
+add field and one in the detail pane. A due date on the add field is
+used one time, then it goes away.
 .SH OPTIONS
 .TP
 .B \-\-window

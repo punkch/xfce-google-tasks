@@ -111,6 +111,55 @@ def test_open_count_and_list_title():
     assert store.list_title(ALL_LISTS) == "All lists"
 
 
+# -- task list changes -----------------------------------------------------
+
+def test_add_list_puts_the_new_list_at_the_end():
+    store = filled()
+    store.add_list(TaskList(id="L3", title="Holiday", tasks=[]))
+    assert [item.id for item in store.lists] == ["L1", "L2", "L3"]
+
+
+def test_remove_list_gives_the_index_and_shows_all_lists_again():
+    store = filled()
+    store.set_selected("L2")
+    assert store.remove_list("L2") == 1
+    assert [item.id for item in store.lists] == ["L1"]
+    assert store.selected_list_id is ALL_LISTS
+    assert store.remove_list("L2") == -1          # gone: no second removal
+
+
+def test_remove_list_leaves_another_choice_alone():
+    store = filled()
+    store.set_selected("L1")
+    assert store.remove_list("L2") == 1
+    assert store.selected_list_id == "L1"
+
+
+def test_rename_list_changes_the_title_of_one_list_only():
+    store = filled()
+    store.rename_list("L1", "Office")
+    assert [item.title for item in store.lists] == ["Office", "Home"]
+    store.rename_list("gone", "Nothing")          # an unknown list is no crash
+    assert [item.title for item in store.lists] == ["Office", "Home"]
+
+
+def test_replace_list_keeps_the_tasks_we_have():
+    """Google answers a rename with the list alone, without its tasks."""
+    store = filled()
+    store.replace_list(TaskList(id="L1", title="Office", tasks=[]))
+    assert store.lists[0].title == "Office"
+    assert [t.id for t in store.lists[0].tasks] == ["t1", "t2", "t3"]
+
+
+def test_remove_tasks_takes_several_out_by_id():
+    store = filled()
+    assert store.remove_tasks("L1", ["t1", "t3"]) == 2
+    assert [t.id for t in store.lists[0].tasks] == ["t2"]
+    assert store.remove_tasks("L1", ["t1"]) == 0  # gone already
+    assert store.remove_tasks("gone", ["t1"]) == 0
+    assert store.remove_tasks("L1", []) == 0
+
+
 # -- single task changes ---------------------------------------------------
 
 def test_remove_task_gives_back_the_index_it_had():
@@ -132,8 +181,10 @@ def test_replace_task_keeps_the_place_and_the_depth():
     store.replace_task(fresh)
     assert store.lists[0].tasks[1] is fresh
     assert fresh.depth == 1
+    # A task that is not in the store stays out: it can wait behind the
+    # undo bar, and an answer from Google must not bring it back.
     store.replace_task(Task(id="new", list_id="L1"))
-    assert store.lists[0].tasks[-1].id == "new"
+    assert "new" not in [task.id for task in store.lists[0].tasks]
 
 
 # -- a load that arrives in the middle of a change (A1) --------------------

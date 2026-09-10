@@ -8,6 +8,8 @@ The command line and the place of the popup on screen live here too:
 both are pure functions of their input.
 """
 
+import datetime as dt
+
 MIN_THRESHOLD = 0.400  # seconds; process start times are not exact
 
 # Popup size in pixels. `place` needs them, and so does the popup itself.
@@ -61,6 +63,15 @@ def classify_click(prev_ts: float | None, ts: float, threshold: float) -> str:
     if abs(ts - prev_ts) < threshold:
         return "double"
     return "single"
+
+
+def due_shortcuts(today: dt.date) -> dict[str, dt.date]:
+    """The quick buttons of the due date popover, in the order they show.
+
+    The dates come from `today`, so a test gives its own day and the
+    widget gives the real one.
+    """
+    return {"Today": today, "Tomorrow": today + dt.timedelta(days=1)}
 
 
 def clamp(value: int, low: int, high: int) -> int:

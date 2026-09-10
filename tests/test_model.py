@@ -23,6 +23,17 @@ def test_task_from_api_reads_every_field():
     assert model.task_from_api({"id": "3", "due": "rubbish"}, "L").due is None
 
 
+def test_tasklist_from_api_starts_empty_without_tasks():
+    """insert and patch answer with the list alone: no tasks come back."""
+    made = model.tasklist_from_api({"id": "L1", "title": "Work"})
+    assert (made.id, made.title, made.tasks) == ("L1", "Work", [])
+    made.tasks.append(task("a"))
+    assert model.tasklist_from_api({"id": "L2"}).tasks == []   # no shared list
+    assert model.tasklist_from_api({"id": "L2"}).title == "?"
+    with_tasks = model.tasklist_from_api({"id": "L3", "title": "Home"}, [task("b")])
+    assert [t.id for t in with_tasks.tasks] == ["b"]
+
+
 def test_overdue_only_for_open_tasks_with_a_past_date():
     assert model.is_overdue(task("a", due=TODAY - dt.timedelta(days=1)), TODAY)
     assert not model.is_overdue(task("b", due=TODAY), TODAY)

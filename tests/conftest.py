@@ -119,10 +119,16 @@ class FakeResult:
 
 
 class FakeCollection:
-    """Records (name, kwargs) for every call. `list` walks its pages."""
+    """Records (name, kwargs) for every call. `list` walks its pages.
 
-    def __init__(self, pages=None):
+    `id_key` names the keyword that holds the id of the thing a write
+    changes: `task` for `tasks()`, `tasklist` for `tasklists()`. Google
+    gives that id back in the answer, so the fake does the same.
+    """
+
+    def __init__(self, pages=None, id_key="task"):
         self.pages = pages or {}
+        self.id_key = id_key
         self.calls = []
 
     def list(self, **kwargs):
@@ -149,12 +155,13 @@ class FakeCollection:
         self.calls.append((name, kwargs))
         body = {key: value for key, value in (kwargs.get("body") or {}).items()
                 if value is not None}
-        return FakeResult({"id": kwargs.get("task", "new-id"), **body})
+        return FakeResult({"id": kwargs.get(self.id_key) or "new-id", **body})
 
 
 class FakeService:
     def __init__(self, lists=None, tasks=None):
-        self._lists = FakeCollection({"lists": lists or [{"items": []}]})
+        self._lists = FakeCollection({"lists": lists or [{"items": []}]},
+                                     id_key="tasklist")
         self._tasks = FakeCollection(tasks or {})
 
     def tasklists(self):

@@ -11,7 +11,7 @@ pytest.importorskip("gi")
 
 from gtasks_panel.model import Task, TaskList  # noqa: E402
 from gtasks_panel.paths import AUTH_NO_TOKEN  # noqa: E402
-from gtasks_panel.ui.store import TaskStore  # noqa: E402
+from gtasks_panel.ui.store import ALL_LISTS, TaskStore  # noqa: E402
 from gtasks_panel.ui.worker import AuthNeeded, Job, Worker, error_text  # noqa: E402
 
 
@@ -233,6 +233,174 @@ def test_a_cache_that_cannot_be_written_is_still_a_good_load(mod, monkeypatch, c
 
 def _raise_oserror(_lists):
     raise OSError("Read-only file system")
+
+
+# -- a due date on a new task ----------------------------------------------
+
+def test_add_sends_the_due_date_when_there_is_one():
+    import datetime as dt
+
+    from conftest import FakeService
+
+    store, worker, jobs = parts()
+    worker.add("L1", "No date")
+    service = FakeService()
+    jobs.last.fn(service)
+    assert service._tasks.calls[-1][1]["body"] == {"title": "No date"}
+
+    worker.add("L1", "Pay bill", due=dt.date(2026, 9, 11))
+    jobs.last.fn(service)
+    assert service._tasks.calls[-1][1]["body"] == {
+        "title": "Pay bill", "due": "2026-09-11T00:00:00.000Z"}
+
+
+# -- task list jobs --------------------------------------------------------
+
+def test_add_list_adds_it_and_chooses_it():
+    store, worker, jobs = parts()
+    worker.add_list("Holiday")
+    assert store.find_list("L3") is None          # nothing before Google answers
+    jobs.last.on_done(TaskList(id="L3", title="Holiday", tasks=[]))
+    assert [item.id for item in store.lists] == ["L1", "L2", "L3"]
+    assert store.selected_list_id == "L3"
+
+
+def test_rename_list_shows_the_new_title_at_once():
+    store, worker, jobs = parts()
+    worker.rename_list(store.lists[0], "Office")
+    assert store.lists[0].title == "Office"
+    jobs.last.on_done(TaskList(id="L1", title="Office", tasks=[]))
+    assert store.lists[0].title == "Office"
+    assert [t.id for t in store.lists[0].tasks] == ["t1", "t2"]   # tasks stay
+
+
+def test_rename_list_puts_the_old_title_back_when_google_says_no():
+    store, worker, jobs = parts()
+    worker.rename_list(store.lists[0], "Office")
+    worker.on_failed(FakeHttpError("boom"), jobs.last.on_error)
+    assert store.lists[0].title == "Work"
+
+
+def test_delete_list_waits_for_google():
+    store, worker, jobs = parts()
+    store.set_selected("L1")
+    worker.delete_list(store.lists[0])
+    assert store.find_list("L1") is not None      # the row stays for now
+    jobs.last.on_done(None)
+    assert [item.id for item in store.lists] == ["L2"]
+    assert store.selected_list_id is ALL_LISTS    # All lists again
+    assert len(jobs.jobs) == 2                    # the panel job followed
+
+
+def test_a_failed_delete_list_leaves_the_list_where_it_is():
+    store, worker, jobs = parts()
+    worker.delete_list(store.lists[0])
+    worker.on_failed(FakeHttpError("Cannot delete the default list"),
+                     jobs.last.on_error)
+    assert [item.id for item in store.lists] == ["L1", "L2"]
+    assert store.error == "Cannot delete the default list"
+
+
+def test_clear_completed_takes_the_deleted_tasks_out():
+    store, worker, jobs = parts()
+    worker.clear_completed(store.lists[0])
+    jobs.last.on_done(["t1"])
+    assert [t.id for t in store.lists[0].tasks] == ["t2"]
+    assert len(jobs.jobs) == 2                    # the panel job followed
+
+
+def test_clear_completed_reads_the_list_again_after_an_error(mod):
+    store, worker, jobs = parts()
+    worker.clear_completed(store.lists[0])
+    worker.on_failed(OSError("down"), jobs.last.on_error)
+    assert store.status == "Loading…"             # the reload started
+    assert len(jobs.jobs) == 2
+
+
+def test_complete_all_sends_the_open_tasks_of_the_store_only():
+    """The whole way through: the job runs against a fake service."""
+    from conftest import FakeService
+
+    store, worker, jobs = parts()
+    store.lists[0].tasks.append(Task(id="t9", list_id="L1", title="Old",
+                                     status="completed"))
+    worker.complete_all(store.lists[0])
+    service = FakeService()
+    written = jobs.last.fn(service)
+    assert [kwargs["task"] for call, kwargs in service._tasks.calls if call == "patch"] \
+        == ["t1", "t2"]                           # the done one is left alone
+    assert service._tasks.calls[-1][1]["body"] == {"status": "completed"}
+    assert [task.id for task in written] == ["t1", "t2"]
+
+
+def test_clear_completed_deletes_the_done_tasks_google_names():
+    """The whole way through: the job asks Google, then deletes."""
+    from conftest import FakeService
+
+    store, worker, jobs = parts()
+    service = FakeService(tasks={"L1": [{"items": [
+        {"id": "t1", "title": "Report"},
+        {"id": "t2", "title": "Bank", "status": "completed"},
+    ]}]})
+    worker.clear_completed(store.lists[0])
+    assert jobs.last.fn(service) == ["t2"]
+    assert [kwargs["task"] for call, kwargs in service._tasks.calls if call == "delete"] \
+        == ["t2"]
+
+
+def test_complete_all_marks_the_open_tasks_the_worker_saw():
+    store, worker, jobs = parts()
+    worker.complete_all(store.lists[0])
+    fresh = [Task(id="t1", list_id="L1", title="Report", status="completed"),
+             Task(id="t2", list_id="L1", title="Bank", status="completed")]
+    jobs.last.on_done(fresh)
+    assert [t.completed for t in store.lists[0].tasks] == [True, True]
+    assert len(jobs.jobs) == 2
+
+
+def test_complete_all_reads_the_list_again_after_an_error(mod):
+    store, worker, jobs = parts()
+    worker.complete_all(store.lists[0])
+    worker.on_failed(FakeHttpError("boom"), jobs.last.on_error)
+    assert store.status == "Loading…"
+    assert len(jobs.jobs) == 2
+
+
+def test_a_long_job_counts_its_work_out_in_the_status_line(monkeypatch):
+    """The progress callback must not stay in the GLib idle queue.
+
+    GLib runs an idle callback again while it answers True, and
+    `set_status` answers True when the text changed. So the text would
+    come back after the job cleared it.
+    """
+    from gtasks_panel import api
+
+    store, worker, jobs = parts()
+    idles = []
+    kept = []
+    # The store uses the same GLib, so take its keyword argument too.
+    monkeypatch.setattr("gtasks_panel.ui.worker.GLib.idle_add",
+                        lambda fn, *args, **kwargs: idles.append((fn, args)) or 1)
+    monkeypatch.setattr(api, "clear_completed",
+                        lambda service, list_id, progress=None: kept.append(progress))
+    monkeypatch.setattr(api, "complete_all",
+                        lambda service, list_id, tasks, progress=None: kept.append(progress))
+
+    worker.clear_completed(store.lists[0])
+    jobs.last.fn(None)                            # the job keeps its progress callback
+    kept[-1](2, 5)                                # the worker thread reports
+    function, args = idles[-1]
+    assert args == ("Deleting 2 of 5…",)
+    assert function(*args) is False               # GLib drops it after one run
+    assert store.status == "Deleting 2 of 5…"
+
+    worker.complete_all(store.lists[0])
+    jobs.last.fn(None)
+    kept[-1](1, 2)
+    function, args = idles[-1]
+    assert args == ("Marking 1 of 2 done…",)
+    assert function(*args) is False
+    assert store.status == "Marking 1 of 2 done…"
 
 
 # -- the panel item --------------------------------------------------------

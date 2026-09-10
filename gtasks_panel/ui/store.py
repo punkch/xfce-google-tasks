@@ -136,6 +136,45 @@ class TaskStore:
             return by_title.id
         return self.lists[0].id if self.lists else None
 
+    # -- task list changes -------------------------------------------------
+
+    def add_list(self, list_: TaskList) -> None:
+        """Put a new task list at the end."""
+        self.lists.append(list_)
+        self.notify()
+
+    def remove_list(self, list_id: str) -> int:
+        """Take a task list out. Returns the index it had, or -1.
+
+        The window shows All lists again when the list that goes was the
+        chosen one.
+        """
+        found = next((i for i, item in enumerate(self.lists) if item.id == list_id), -1)
+        if found < 0:
+            return -1
+        self.lists.pop(found)
+        if self.selected_list_id == list_id:
+            self.selected_list_id = ALL_LISTS
+        self.notify()
+        return found
+
+    def rename_list(self, list_id: str, title: str) -> None:
+        """Give a task list another title. An unknown list changes nothing."""
+        found = self.find_list(list_id)
+        if found is None:
+            return
+        found.title = title
+        self.notify()
+
+    def replace_list(self, list_: TaskList) -> None:
+        """Copy the fresh title from Google onto the list we show.
+
+        `tasklists.insert` and `tasklists.patch` answer with the list
+        alone, without its tasks. So only the title comes over: the tasks
+        we hold stay.
+        """
+        self.rename_list(list_.id, list_.title)
+
     # -- single task changes ----------------------------------------------
 
     def add_task(self, task: Task, index: int | None = None) -> None:
@@ -156,19 +195,32 @@ class TaskStore:
             self.notify()
         return found
 
+    def remove_tasks(self, list_id: str, task_ids) -> int:
+        """Take several tasks out of one list by id. Returns how many went."""
+        target = self.find_list(list_id)
+        if target is None:
+            return 0
+        gone = set(task_ids)
+        keep = [task for task in target.tasks if task.id not in gone]
+        removed = len(target.tasks) - len(keep)
+        if removed:
+            target.tasks[:] = keep
+            self.notify()
+        return removed
+
     def replace_task(self, task: Task) -> None:
         """Copy fresh field values from Google onto the task we show."""
         target = self.find_list(task.list_id)
         if target is None:
             return
+        # Replace only. A task that is not here was taken out on
+        # purpose (it waits behind the undo bar), and must not come back.
         for index, item in enumerate(target.tasks):
             if item.id == task.id:
                 task.depth = item.depth
                 target.tasks[index] = task
-                break
-        else:
-            target.tasks.append(task)
-        self.notify()
+                self.notify()
+                return
 
     def find_task(self, list_id: str, task_id: str) -> Task | None:
         found = self.find_list(list_id)

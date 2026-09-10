@@ -113,3 +113,119 @@ def test_delete_calls_the_api_and_returns_nothing():
 def test_due_to_api():
     assert api.due_to_api(DUE) == DUE_API
     assert api.due_to_api(None) is None
+
+
+# -- task lists ------------------------------------------------------------
+
+def test_insert_tasklist_sends_the_title_only():
+    service = FakeService()
+    made = api.insert_tasklist(service, "Holiday")
+    assert service._lists.calls[-1] == ("insert", {"body": {"title": "Holiday"}})
+    assert (made.title, made.tasks) == ("Holiday", [])
+    assert made.id == "new-id"
+
+
+def test_rename_tasklist_patches_the_title_and_keeps_the_id():
+    service = FakeService()
+    renamed = api.rename_tasklist(service, "L1", "Work again")
+    assert service._lists.calls[-1] == ("patch", {
+        "tasklist": "L1", "body": {"title": "Work again"}})
+    assert (renamed.id, renamed.title) == ("L1", "Work again")
+
+
+def test_delete_tasklist_calls_the_api_and_returns_nothing():
+    service = FakeService()
+    assert api.delete_tasklist(service, "L1") is None
+    assert service._lists.calls[-1] == ("delete", {"tasklist": "L1"})
+
+
+# -- clear completed -------------------------------------------------------
+
+def done_and_open_tasks():
+    return FakeService(tasks={"L1": [{"items": [
+        {"id": "t1", "title": "Open"},
+        {"id": "t2", "title": "Old", "status": "completed"},
+        {"id": "t3", "title": "Older", "status": "completed"},
+    ]}]})
+
+
+def test_clear_completed_asks_for_the_done_tasks_and_deletes_them():
+    service = done_and_open_tasks()
+    steps = []
+    ids = api.clear_completed(service, "L1",
+                              lambda index, total: steps.append((index, total)))
+    assert ids == ["t2", "t3"]
+    assert steps == [(1, 2), (2, 2)]
+    asked = next(kwargs for call, kwargs in service._tasks.calls if call == "list")
+    assert asked["showCompleted"] is True and asked["showHidden"] is True
+    assert [kwargs["task"] for call, kwargs in service._tasks.calls if call == "delete"] \
+        == ["t2", "t3"]
+
+
+def test_clear_completed_works_without_a_progress_callback():
+    service = done_and_open_tasks()
+    assert api.clear_completed(service, "L1") == ["t2", "t3"]
+
+
+def test_clear_completed_stops_at_the_first_error(monkeypatch):
+    service = done_and_open_tasks()
+    steps = []
+    monkeypatch.setattr(api, "delete_task", _fails_on_call(2))
+    with pytest.raises(RuntimeError):
+        api.clear_completed(service, "L1", lambda index, total: steps.append(index))
+    assert steps == [1]     # nothing partial comes back, only the first tick ran
+
+
+# -- mark all done ---------------------------------------------------------
+
+def open_and_done_tasks():
+    from gtasks_panel.model import Task
+
+    return [Task(id="t1", list_id="L1", title="Open"),
+            Task(id="t2", list_id="L1", title="Done", status="completed"),
+            Task(id="t3", list_id="L1", title="Also open")]
+
+
+def test_complete_all_patches_the_open_tasks_only():
+    service = FakeService()
+    steps = []
+    written = api.complete_all(service, "L1", open_and_done_tasks(),
+                               lambda index, total: steps.append((index, total)))
+    assert [task.id for task in written] == ["t1", "t3"]
+    assert all(task.completed for task in written)
+    assert steps == [(1, 2), (2, 2)]
+    assert [kwargs["task"] for call, kwargs in service._tasks.calls if call == "patch"] \
+        == ["t1", "t3"]
+    assert body_of(service._tasks, "patch") == {"status": "completed"}
+
+
+def test_complete_all_with_nothing_open_asks_google_nothing():
+    from gtasks_panel.model import Task
+
+    service = FakeService()
+    assert api.complete_all(service, "L1", [Task(id="t2", list_id="L1",
+                                                 status="completed")]) == []
+    assert service._tasks.calls == []
+
+
+def test_complete_all_stops_at_the_first_error(monkeypatch):
+    service = FakeService()
+    steps = []
+    monkeypatch.setattr(api, "complete_task", _fails_on_call(2))
+    with pytest.raises(RuntimeError):
+        api.complete_all(service, "L1", open_and_done_tasks(),
+                         lambda index, total: steps.append(index))
+    assert steps == [1]
+
+
+def _fails_on_call(number):
+    """A stand-in that raises on call `number`. It counts its own calls."""
+    calls = []
+
+    def call(*args, **kwargs):
+        calls.append(1)
+        if len(calls) >= number:
+            raise RuntimeError("Google said no")
+        return None
+
+    return call
