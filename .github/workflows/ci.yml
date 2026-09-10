@@ -19,7 +19,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            debhelper devscripts python3-pytest python3-gi gir1.2-gtk-3.0 \
+            build-essential debhelper devscripts python3-pytest python3-gi gir1.2-gtk-3.0 \
             desktop-file-utils lintian xvfb
 
       # "make deb" runs "make check" (syntax, compileall, man pages, pytest).
